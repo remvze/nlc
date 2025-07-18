@@ -6,13 +6,18 @@
 
 ## Table of Contents
 
+- ⚠️ [Prerequisites](#prerequisites)
 - ⚡ [Installation](#installation)
 - ✨ [Usage](#usage)
 - 🔮 [Commands](#commands)
-- ⚠️ [Prerequisites](#prerequisites)
 - 🤝 [Contributing](#contributing)
 - ⭐ [Support](#support)
 - 📜 [License](#license)
+
+## Prerequisites
+
+- **Node.js** and **npm** must be installed on your system. You can download them from [nodejs.org](https://nodejs.org).
+- You must have a valid **OpenAI API key** to use NLC. You can get one from [platform.openai.com/account/api-keys](https://platform.openai.com/account/api-keys).
 
 ## Installation
 
@@ -59,11 +64,6 @@ Manage configuration settings for NLC.
 nlc config key <your_openai_api_key>
 nlc config model "gpt-4o-mini"
 ```
-
-## Prerequisites
-
-- **Node.js** and **npm** must be installed on your system. You can download them from [nodejs.org](https://nodejs.org).
-- You must have a valid **OpenAI API key** to use NLC. You can get one from [platform.openai.com/account/api-keys](https://platform.openai.com/account/api-keys).
 
 ## Contributing
 

@@ -1,7 +1,6 @@
 import { writeFileSync } from 'node:fs';
 
 import { confirm, input, select } from '@inquirer/prompts';
-import { highlight } from 'cli-highlight';
 import { generateText } from 'ai';
 import z from 'zod';
 import type { createOpenAI } from '@ai-sdk/openai';

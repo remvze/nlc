@@ -1,6 +1,6 @@
 {
   "name": "nlc",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "description": "💾 A lightweight, AI-powered terminal assistant for natural language commands.",
   "main": "dist/bin/nlc.mjs",
   "bin": {

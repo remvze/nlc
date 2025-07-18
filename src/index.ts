@@ -16,26 +16,35 @@ const config = new Conf({ projectName: 'nlc' });
 
 program
   .name('nlc')
-  .description('A tiny AI-powered terminal assistant')
+  .description(
+    'A lightweight, AI-powered terminal assistant for natural language commands',
+  )
   .version(pkg.version);
 
 program
   .command('do')
-  .description('Do Something')
-  .argument('<request...>', 'Your request from NLC')
-  .option('--file <path>', 'A file to be passed with request')
+  .description('Execute a natural language request using NLC')
+  .argument('<request...>', 'The action or query you want NLC to perform')
+  .option(
+    '--file <path>',
+    'Optional file to include with your request (e.g., for context or input data)',
+  )
   .action(async (request, { file }: { file: string }) => {
     const API_KEY = config.get('OPENAI_API_KEY');
 
     if (!API_KEY) {
-      console.error('Please set an OpenAI API key');
+      console.error(
+        'OpenAI API key not found. Please set it using: nlc config key <your-api-key>',
+      );
       return;
     }
 
     const MODEL_NAME = config.get('MODEL_NAME', 'gpt-4o-mini');
 
     if (!MODEL_NAME) {
-      console.error('Please first set the model name');
+      console.error(
+        'No model configured. Set one using: nlc config model <model-name>',
+      );
       return;
     }
 
@@ -50,7 +59,9 @@ program
           .map((line, index) => `${index + 1}> ${line}`)
           .join('\n');
       } else {
-        console.error('ERROR', "File doesn't exist");
+        console.error(
+          `File not found: "${file}". Please check the path and try again.`,
+        );
         return;
       }
     }
@@ -61,42 +72,43 @@ program
           {
             role: 'system',
             content: `
-You are NLC, a smart and efficient command-line assistant operating in a terminal environment.
-Interpret natural language requests and respond with shell commands, scripts, or concise command-line outputs to help users automate tasks and interact with their system.
-Be direct and concise. Avoid small talk unless explicitly asked.
+You are NLC, an intelligent and efficient command-line assistant running in a terminal environment.
+Interpret natural language requests and respond with shell commands, scripts, or succinct CLI outputs.
+Stay concise and pragmatic. Avoid small talk unless explicitly requested.
 `,
           },
           {
             role: 'assistant',
-            content:
-              'NLC is ready. What task would you like to execute via the terminal?',
+            content: 'NLC is ready. What would you like to do?',
           },
           {
             role: 'user',
             content: fileContent
-              ? `I have this script \`${file}\`:\n\n${fileContent}\n\n---\n\nPlease help me with: ${prompt}`
-              : `Please help me with: ${prompt}`,
+              ? `Here is the script \`${file}\`:\n\n${fileContent}\n\n---\n\nTask: ${prompt}`
+              : `Task: ${prompt}`,
           },
         ],
         tools: {
           suggestCommand: {
             description:
-              "Suggest a command based on user's request, only if the user implicitly or explicitly needed a command",
+              "Suggest a command based on the user's natural language input — only when a command is clearly implied or requested.",
             parameters: z.object({
               command: z
                 .string()
-                .describe('Your suggest command based on user prompt'),
+                .describe(
+                  "A suggested shell command based on the user's request",
+                ),
             }),
             execute: async ({ command }) => {
               console.log(highlight(`$ ${command}`));
 
               const action = await select({
-                message: 'What should I do?',
+                message: 'What would you like to do with this command?',
                 choices: [
                   { value: 'confirm', name: 'Run the command' },
                   { value: 'modify', name: 'Modify the command' },
-                  { value: 'cancel', name: 'Cancel the command' },
-                  { value: 'revise', name: 'Revise the prompt' },
+                  { value: 'revise', name: 'Revise the original request' },
+                  { value: 'cancel', name: 'Cancel' },
                 ],
               });
 
@@ -106,7 +118,7 @@ Be direct and concise. Avoid small talk unless explicitly asked.
 
               if (action === 'modify') {
                 const modified = await input({
-                  message: 'Modified Command:',
+                  message: 'Edit the command:',
                   default: command,
                   prefill: 'editable',
                 });
@@ -127,14 +139,18 @@ Be direct and concise. Avoid small talk unless explicitly asked.
           },
           writeScript: {
             description:
-              "Write a shell script based on the user's request only if explicitly asked for writing a shell script. DO THIS ONLY FOR SHELL AND BASH SCRIPTS AND NOT ANY OTHER LANGUAGES.",
+              "Generates and saves a shell or Bash script based on the user's explicit request. Only create scripts written in shell or Bash—do **not** generate scripts in any other programming language.",
             parameters: z.object({
               script: z
                 .string()
-                .describe('A shell script with very well documented comments'),
+                .describe(
+                  'The complete shell script, with clear and thorough inline comments for readability and explanation.',
+                ),
               suggestedName: z
                 .string()
-                .describe('Suggested file name for saving the script'),
+                .describe(
+                  'A recommended filename under which the script can be saved.',
+                ),
             }),
             execute: async ({ script, suggestedName }) => {
               console.log('The Script:\n');
@@ -158,9 +174,13 @@ Be direct and concise. Avoid small talk unless explicitly asked.
           },
           error: {
             description:
-              "Use this when no other tool was fitting which means the user's request is outside of the scope of this project.",
+              "Use this as a fallback when no other tool is appropriate—specifically when the user's request falls outside the defined scope or capabilities of this project.",
             parameters: z.object({
-              errorMessage: z.string().describe('The error message'),
+              errorMessage: z
+                .string()
+                .describe(
+                  'A clear and informative message explaining why the request cannot be fulfilled.',
+                ),
             }),
             execute: async ({ errorMessage }) => {
               console.error('ERROR', errorMessage);
@@ -168,16 +188,16 @@ Be direct and concise. Avoid small talk unless explicitly asked.
           },
           modifyScript: {
             description:
-              'If user is asking for a modification or fixing a problem of a shell script and they have also provided you with the script, use this tool to modify or fix the script based on their needs. DO THIS ONLY FOR SHELL AND BASH SCRIPTS AND NOT ANY OTHER LANGUAGES.',
+              'Use this tool when the user requests a modification or bug fix for a **shell** or **Bash** script **and** has provided the original script. This tool should only be used for shell/Bash scripts—**not** for scripts in other programming languages.',
             parameters: z.object({
               modifiedScript: z
                 .string()
                 .describe(
-                  'The modified shell script with very well document comments',
+                  'The updated shell script with clear and well-documented inline comments explaining the changes.',
                 ),
             }),
             execute: async ({ modifiedScript }) => {
-              console.log('The Modified Script:\n');
+              console.log('The modified script:\n');
               console.log(highlight(modifiedScript));
 
               const filename = await input({
@@ -222,33 +242,35 @@ async function runCommand(command: string) {
 
 const configCommand = program
   .command('config')
-  .description('Commands related to configuring NLC');
+  .description('Manage configuration settings for NLC');
 
 configCommand
   .command('key')
-  .description('Set OpenAI API Key')
-  .argument('<key>', 'Your API Key')
+  .description('Set your OpenAI API key for authentication')
+  .argument('<key>', 'Your OpenAI API key')
   .action((key: string) => {
     if (!key.trim()) return;
 
     config.set('OPENAI_API_KEY', key);
 
-    console.log('API key set successfully.');
+    console.log('OpenAI API key saved successfully.');
   });
 
 configCommand
   .command('model')
-  .description('Set the OpenAI model name')
-  .argument('<model>', 'Your desired model (gpt-4o-mini, gpt-3.5-turbo)')
+  .description('Choose which OpenAI model NLC should use')
+  .argument('<model>', 'Model name (e.g., gpt-4o-mini or gpt-3.5-turbo)')
   .action((model: string) => {
     if (!['gpt-3.5-turbo', 'gpt-4o-mini'].includes(model)) {
-      console.error('Invalid model name');
+      console.error(
+        'Invalid model name. Supported models: gpt-3.5-turbo, gpt-4o-mini',
+      );
       return;
     }
 
     config.set('MODEL_NAME', model);
 
-    console.log('Model name set successfully.');
+    console.log('Model set successfully.');
   });
 
 export { program };

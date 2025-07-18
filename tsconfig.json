@@ -1,0 +1,11 @@
+{
+  "extends": "@tsconfig/node20/tsconfig.json",
+  "compilerOptions": {
+    "baseUrl": "./src",
+    "paths": {
+      "@/*": ["./*"]
+    },
+    "moduleResolution": "bundler",
+    "module": "ESNext"
+  }
+}

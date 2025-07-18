@@ -1,0 +1,42 @@
+{
+  "types": [
+    {
+      "type": "feat",
+      "section": "✨ Features"
+    },
+    {
+      "type": "fix",
+      "section": "🐛 Bug Fixes"
+    },
+    {
+      "type": "chore",
+      "hidden": true,
+      "section": "🚚 Chores"
+    },
+    {
+      "type": "docs",
+      "hidden": true,
+      "section": "📝 Documentation"
+    },
+    {
+      "type": "style",
+      "hidden": true,
+      "section": "💄 Styling"
+    },
+    {
+      "type": "refactor",
+      "hidden": true,
+      "section": "♻️ Code Refactoring"
+    },
+    {
+      "type": "perf",
+      "hidden": true,
+      "section": "⚡️ Performance Improvements"
+    },
+    {
+      "type": "test",
+      "hidden": true,
+      "section": "✅ Testing"
+    }
+  ]
+}

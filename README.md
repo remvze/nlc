@@ -51,7 +51,7 @@ nlc do "write me a port scanner in Bash"
 
 - `--file`: Optional file to include with your request (e.g., for context or input data).
 
-### `open`
+### `config`
 
 Manage configuration settings for NLC.
 

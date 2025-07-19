@@ -2,9 +2,9 @@ import type { Command } from 'commander';
 
 import { runCommand } from '@/lib/command';
 import { loadFileWithLineNumbers } from '@/helpers/file';
-import { getOpenAIClient, getModelName } from '@/lib/openai';
 import { processPrompt } from '@/lib/processor';
 import { error } from '@/lib/logger';
+import { getClient, getModelName } from '@/lib/llm';
 
 export function registerDoCommands(program: Command) {
   program
@@ -16,7 +16,7 @@ export function registerDoCommands(program: Command) {
       'Optional file to include with your request (e.g., for context or input data)',
     )
     .action(async (request: string[], { file }: { file: string }) => {
-      const openai = getOpenAIClient();
+      const client = getClient();
       const modelName = getModelName();
 
       const originalPromptRef = { current: request.join(' ') };
@@ -33,7 +33,7 @@ export function registerDoCommands(program: Command) {
         prompt: originalPromptRef.current,
         fileContent,
         filePath: file,
-        openai,
+        client,
         modelName,
         runCommand,
         originalPromptRef,

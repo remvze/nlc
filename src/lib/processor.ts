@@ -4,6 +4,7 @@ import { confirm, input, select } from '@inquirer/prompts';
 import { generateText } from 'ai';
 import z from 'zod';
 import type { createOpenAI } from '@ai-sdk/openai';
+import type { createOpenAICompatible } from '@ai-sdk/openai-compatible';
 
 import type { runCommand } from '@/lib/command';
 import { error, logCommand, logScript } from './logger';
@@ -12,7 +13,9 @@ export interface PromptOptions {
   prompt: string;
   fileContent: string | null;
   filePath: string | undefined;
-  openai: ReturnType<typeof createOpenAI>;
+  client:
+    | ReturnType<typeof createOpenAI>
+    | ReturnType<typeof createOpenAICompatible>;
   modelName: string;
   runCommand: typeof runCommand;
   originalPromptRef: { current: string };
@@ -23,7 +26,7 @@ export async function processPrompt(opts: PromptOptions): Promise<void> {
     prompt,
     fileContent,
     filePath,
-    openai,
+    client,
     modelName,
     runCommand,
     originalPromptRef,
@@ -175,7 +178,7 @@ Stay concise and pragmatic. Avoid small talk unless explicitly requested.
         },
       },
     },
-    model: openai(modelName),
+    model: client(modelName),
   });
 
   if (text) console.log(text);

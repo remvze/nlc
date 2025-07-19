@@ -43,6 +43,30 @@ nlc --help
 
 ## Commands
 
+### `config`
+
+Manage configuration settings for NLC.
+
+#### OpenAI
+
+```bash
+nlc config provider openai
+
+nlc config key <your_openai_api_key>
+
+nlc config model "gpt-4o-mini"
+```
+
+#### LM Studio
+
+```bash
+nlc config provider lmstudio
+
+nlc config base_url "http://127.0.0.1:1234"
+
+nlc config model "meta/llama-3.3-70b"
+```
+
 ### `do`
 
 Execute a natural language request using NLC.
@@ -55,15 +79,6 @@ nlc do "write me a port scanner in Bash"
 **Options:**
 
 - `--file`: Optional file to include with your request (e.g., for context or input data).
-
-### `config`
-
-Manage configuration settings for NLC.
-
-```bash
-nlc config key <your_openai_api_key>
-nlc config model "gpt-4o-mini"
-```
 
 ## Contributing
 

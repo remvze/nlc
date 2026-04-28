@@ -8,6 +8,8 @@ import { z } from "zod";
 import { rgPath } from "@vscode/ripgrep";
 import { confirm, input } from "@inquirer/prompts";
 
+let autoAcceptChanges = false;
+
 import pkg from "../package.json";
 
 config({ quiet: true });
@@ -178,7 +180,9 @@ const tools: ToolSet = {
         `I want to write to \"${path}\" the following content:\n\n${new_content}\n`,
       );
 
-      const shouldExecute = await confirm({ message: "Should I do it?" });
+      const shouldExecute = autoAcceptChanges
+        ? true
+        : await confirm({ message: "Should I do it?" });
 
       if (!shouldExecute) {
         return { error: `User denied the request to write to this file.` };
@@ -238,7 +242,9 @@ const tools: ToolSet = {
         `I want to edit \"${path}\" with operation:\n${JSON.stringify(operation, null, 2)}\n`,
       );
 
-      const shouldExecute = await confirm({ message: "Should I do it?" });
+      const shouldExecute = autoAcceptChanges
+        ? true
+        : await confirm({ message: "Should I do it?" });
 
       if (!shouldExecute) {
         return { error: `User denied the request to edit this file.` };
@@ -433,7 +439,7 @@ const tools: ToolSet = {
 
   run_command: tool({
     description:
-      "Run a command in the user's environment. It will first ask for confirmation, then execute the command using node:child_process, streaming stdout and stderr to the terminal as data arrives, and finally return { stdout, stderr, exitCode }.",
+      "Run a command in the user's environment. It prompts for confirmation unless dangerously-accept is enabled, then executes the command using node:child_process, streaming stdout and stderr to the terminal as data arrives, and finally returns { stdout, stderr, exitCode }.",
     inputSchema: z.object({
       command: z.string().describe("The command to execute."),
       cwd: z.string().optional().describe("Optional working directory."),
@@ -443,9 +449,11 @@ const tools: ToolSet = {
 
       console.log(`Preparing to run command: "${command}" in "${workingDir}"`);
 
-      const shouldExecute = await confirm({
-        message: `Execute the following command in "${workingDir}": ${command}?`,
-      });
+      const shouldExecute = autoAcceptChanges
+        ? true
+        : await confirm({
+            message: `Execute the following command in "${workingDir}": ${command}?`,
+          });
 
       if (!shouldExecute) {
         return {
@@ -511,13 +519,18 @@ const shell =
   process.env.SHELL ??
   process.env.ComSpec ??
   (process.platform === "win32" ? "cmd.exe" : "sh");
-const systemPrompt = `
+const getSystemPrompt = (dangerouslyAccept: boolean) => `
 You are NLC, a terminal AI assistant for executing tasks in natural language.
 
 The user's current working directory is "${process.cwd()}".
 The user's platform is "${process.platform}".
 The user's shell is "${shell}".
 Prefer commands/syntax that match this environment.
+
+Dangerous mode:
+- dangerously-accept is ${dangerouslyAccept ? "ACTIVE" : "NOT active"}.
+- When dangerously-accept is ACTIVE, file writes/edits and command executions run without confirmation prompts.
+- In this mode, be extra careful: favor read/inspect steps first, avoid destructive actions unless explicitly requested, and clearly state intended impact before making risky changes.
 
 General behavior:
 - Use tools only when needed.
@@ -534,60 +547,80 @@ program
   .command("chat")
   .description("Start an interactive multi-turn chat session with NLC")
   .option("-m, --max-steps <number>", "Maximum tool/model steps per turn", "15")
-  .action(async (options: { maxSteps: string }) => {
-    const parsedMaxSteps = Number.parseInt(options.maxSteps, 10);
-    const maxSteps =
-      Number.isNaN(parsedMaxSteps) || parsedMaxSteps < 1 ? 15 : parsedMaxSteps;
+  .option(
+    "--dangerously-accept",
+    "Automatically accept all file edits/creates and command executions without confirmation prompts",
+  )
+  .action(
+    async (options: { maxSteps: string; dangerouslyAccept?: boolean }) => {
+      autoAcceptChanges = Boolean(options.dangerouslyAccept);
 
-    const conversation: Array<{ role: "user" | "assistant"; content: string }> =
-      [];
+      const parsedMaxSteps = Number.parseInt(options.maxSteps, 10);
+      const maxSteps =
+        Number.isNaN(parsedMaxSteps) || parsedMaxSteps < 1
+          ? 15
+          : parsedMaxSteps;
 
-    console.log("NLC chat started. Type 'exit' to quit.");
+      const conversation: Array<{
+        role: "user" | "assistant";
+        content: string;
+      }> = [];
 
-    while (true) {
-      const message = (await input({ message: "You:" })).trim();
+      console.log("NLC chat started. Type 'exit' to quit.");
 
-      if (!message) {
-        continue;
+      while (true) {
+        const message = (await input({ message: "You:" })).trim();
+
+        if (!message) {
+          continue;
+        }
+
+        if (["exit", "quit", "q"].includes(message.toLowerCase())) {
+          console.log("Goodbye.");
+          break;
+        }
+
+        conversation.push({ role: "user", content: message });
+
+        const { text } = await generateText({
+          model: openai("gpt-5.3-codex"),
+          system: getSystemPrompt(autoAcceptChanges),
+          messages: conversation,
+          stopWhen: stepCountIs(maxSteps),
+          tools,
+        });
+
+        const reply = text?.trim() || "(No response generated.)";
+        conversation.push({ role: "assistant", content: reply });
+
+        console.log(`\nNLC: ${reply}\n`);
       }
-
-      if (["exit", "quit", "q"].includes(message.toLowerCase())) {
-        console.log("Goodbye.");
-        break;
-      }
-
-      conversation.push({ role: "user", content: message });
-
-      const { text } = await generateText({
-        model: openai("gpt-5.3-codex"),
-        system: systemPrompt,
-        messages: conversation,
-        stopWhen: stepCountIs(maxSteps),
-        tools,
-      });
-
-      const reply = text?.trim() || "(No response generated.)";
-      conversation.push({ role: "assistant", content: reply });
-
-      console.log(`\nNLC: ${reply}\n`);
-    }
-  });
+    },
+  );
 
 program
   .command("do")
   .description("Execute a natural language request using NLC")
   .argument("<request...>", "The action or query you want NLC to perform")
-  .action(async (request: string[]) => {
-    const prompt = request.join(" ");
-    const { text } = await generateText({
-      model: openai("gpt-5-nano"),
-      prompt,
-      system: systemPrompt,
-      stopWhen: stepCountIs(15),
-      tools,
-    });
+  .option(
+    "--dangerously-accept",
+    "Automatically accept all file edits/creates and command executions without confirmation prompts",
+  )
+  .action(
+    async (request: string[], options: { dangerouslyAccept: boolean }) => {
+      autoAcceptChanges = Boolean(options.dangerouslyAccept);
 
-    console.log(text);
-  });
+      const prompt = request.join(" ");
+      const { text } = await generateText({
+        model: openai("gpt-5.3-codex"),
+        prompt,
+        system: getSystemPrompt(autoAcceptChanges),
+        stopWhen: stepCountIs(15),
+        tools,
+      });
+
+      console.log(text);
+    },
+  );
 
 export { program };

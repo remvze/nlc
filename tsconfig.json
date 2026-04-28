@@ -6,6 +6,7 @@
       "@/*": ["./*"]
     },
     "moduleResolution": "bundler",
-    "module": "ESNext"
+    "module": "ESNext",
+    "types": ["@types/node"]
   }
 }

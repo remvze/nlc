@@ -7,8 +7,25 @@ import { config } from "dotenv";
 import { z } from "zod";
 import { rgPath } from "@vscode/ripgrep";
 import { confirm, input } from "@inquirer/prompts";
+import boxen from "boxen";
+import chalk from "chalk";
 
 let autoAcceptChanges = false;
+
+function box(title: string, bodyLines: string[] = []) {
+  const body = bodyLines.length > 0 ? `${bodyLines.join("\n").trim()}` : "";
+
+  console.log(
+    boxen(body, {
+      title,
+      titleAlignment: "left",
+      borderStyle: "round",
+      borderColor: "cyan",
+      padding: { left: 1, right: 1 },
+      margin: { top: 1, bottom: 1, left: 0, right: 0 },
+    }),
+  );
+}
 
 import pkg from "../package.json";
 
@@ -124,7 +141,7 @@ const tools: ToolSet = {
     execute: ({ path: _path }) => {
       const path = _path?.trim() ? _path : ".";
 
-      console.log(`Listing files at \"${path}\"`);
+      box("📁 list_files", [`${chalk.dim("path:")} ${chalk.yellow(path)}`]);
 
       try {
         const files = fs.readdirSync(path, { recursive: false });
@@ -143,7 +160,7 @@ const tools: ToolSet = {
       path: z.string().describe("The path of the file you want to read."),
     }),
     execute: ({ path }) => {
-      console.log(`Reading \"${path}\".`);
+      box("📄 read_file", [`${chalk.dim("path:")} ${chalk.yellow(path)}`]);
 
       try {
         const content = fs.readFileSync(path, "utf-8");
@@ -176,9 +193,12 @@ const tools: ToolSet = {
         ),
     }),
     execute: async ({ path, new_content }) => {
-      console.log(
-        `I want to write to \"${path}\" the following content:\n\n${new_content}\n`,
-      );
+      box("📝 create_or_replace_file", [
+        `${chalk.dim("path:")} ${chalk.yellow(path)}`,
+        `${chalk.dim("new_content:")} ${chalk.yellow(`${new_content.length} chars`)}`,
+      ]);
+
+      box("New Content", [chalk.greenBright(new_content)]);
 
       const shouldExecute = autoAcceptChanges
         ? true
@@ -238,9 +258,27 @@ const tools: ToolSet = {
       ]),
     }),
     execute: async ({ path, operation }) => {
-      console.log(
-        `I want to edit \"${path}\" with operation:\n${JSON.stringify(operation, null, 2)}\n`,
-      );
+      box("📝 edit_file", [
+        `${chalk.dim("path:")} ${chalk.yellow(path)}`,
+        `${chalk.dim("operation:")} ${chalk.yellow(operation)}`,
+      ]);
+
+      if (operation.type === "find_replace") {
+        box("Replace", [chalk.redBright(operation.find)]);
+        box("With", [chalk.greenBright(operation.replace)]);
+      }
+
+      if (operation.type === "insert_at_line") {
+        box(`Insert at ${operation.line}`, [
+          chalk.greenBright(operation.content),
+        ]);
+      }
+
+      if (operation.type === "delete_range") {
+        box(`Delete`, [
+          chalk.red(`From line ${operation.startLine} to ${operation.endLine}`),
+        ]);
+      }
 
       const shouldExecute = autoAcceptChanges
         ? true
@@ -316,7 +354,7 @@ const tools: ToolSet = {
       const searchPath = path?.trim() ? path : ".";
       const limit = maxResults ?? 200;
 
-      console.log(`Searching for \"${query}\" in \"${searchPath}\"`);
+      box("🔎 search_files", [`For \"${query}\" in \"${searchPath}\"`]);
 
       const args = [
         "--json",
@@ -447,12 +485,15 @@ const tools: ToolSet = {
     execute: async ({ command, cwd }) => {
       const workingDir = cwd?.trim() ? cwd : process.cwd();
 
-      console.log(`Preparing to run command: "${command}" in "${workingDir}"`);
+      box("⚙️ run_command", [
+        chalk.yellow(command),
+        `${chalk.dim("Directory:")} ${chalk.yellow(workingDir)}`,
+      ]);
 
       const shouldExecute = autoAcceptChanges
         ? true
         : await confirm({
-            message: `Execute the following command in "${workingDir}": ${command}?`,
+            message: `Should I do it?`,
           });
 
       if (!shouldExecute) {
@@ -522,25 +563,69 @@ const shell =
 const getSystemPrompt = (dangerouslyAccept: boolean) => `
 You are NLC, a terminal AI assistant for executing tasks in natural language.
 
-The user's current working directory is "${process.cwd()}".
-The user's platform is "${process.platform}".
-The user's shell is "${shell}".
-Prefer commands/syntax that match this environment.
+Environment:
+- Current working directory: "${process.cwd()}"
+- Platform: "${process.platform}"
+- Shell: "${shell}"
+- Prefer commands and syntax appropriate for this environment.
 
 Dangerous mode:
 - dangerously-accept is ${dangerouslyAccept ? "ACTIVE" : "NOT active"}.
-- When dangerously-accept is ACTIVE, file writes/edits and command executions run without confirmation prompts.
-- In this mode, be extra careful: favor read/inspect steps first, avoid destructive actions unless explicitly requested, and clearly state intended impact before making risky changes.
+- When dangerously-accept is ACTIVE, file writes/edits and command executions run without confirmation.
+- Do not ask for confirmation for normal development tasks.
+- Still avoid clearly destructive or irreversible actions unless explicitly requested.
+- When performing risky actions, briefly state the intended impact before executing.
 
-General behavior:
-- Use tools only when needed.
-- After any tool call, first interpret the result and decide whether the user’s request is already answered.
-- If a tool result already provides enough evidence, STOP and give a direct conclusion to the user.
-- Do NOT run another command that is the same or very similar just to reconfirm the same fact.
+Core behavior:
+- Be concise, direct, and action-oriented.
+- Default to ACTION, not explanation.
+- Do not produce meta-responses like "I will do X" — just do it.
+- Explain results after completing actions, or if blocked.
+
+Tool usage:
+- Use tools proactively whenever they help make progress.
 - Prefer one high-signal command over multiple redundant checks.
-- Only run a follow-up command when the previous output is ambiguous, contradictory, incomplete, or clearly failed.
-- If a command succeeds and its output clearly answers the question, summarize that outcome plainly (e.g., state that something is installed/available/not found, etc.).
-- If a command fails, explain what failed and propose one meaningful next step (not a near-duplicate retry unless there is a clear reason).
+- Do not repeat the same or similar command unless there is a clear reason.
+- After any tool call:
+  - Interpret the result.
+  - Decide whether the task is complete.
+  - If yes, stop and give a clear conclusion.
+  - If not, continue with the next logical step.
+
+Persistence & search:
+- Do not assume failure after a single unsuccessful attempt.
+- If a file or resource is not found:
+  - Explore the directory structure (e.g., list files and folders).
+  - Check common locations (e.g., src/, lib/, app/).
+  - Use search tools (glob, find, grep) if available.
+- Only conclude "not found" after a reasonable search.
+
+Planning:
+- For non-trivial tasks, think in multi-step execution.
+- You may run multiple commands in sequence without asking for permission when they are part of the same task.
+- Prefer completing the task end-to-end rather than stopping after partial progress.
+- If a step fails or output is unclear, adapt and try an alternative approach.
+
+Execution rules:
+- Do not ask for confirmation for safe or reversible operations.
+- Only ask the user for clarification if the request is ambiguous or missing critical information.
+- Avoid unnecessary back-and-forth.
+
+Developer heuristics:
+- Assume common project structures (e.g., src/, components/, pages/).
+- When working in a codebase, explore as needed to understand layout.
+- Use directory listing and search as standard steps when locating files.
+
+Failure handling:
+- If a command fails:
+  - Clearly explain what failed.
+  - Propose one meaningful next step.
+  - Avoid blind retries unless there is a clear change in approach.
+
+Goal:
+- Act like an experienced developer working independently in a terminal.
+- Minimize interaction friction.
+- Complete tasks efficiently and correctly with minimal user intervention.
 `;
 
 program
@@ -593,7 +678,7 @@ program
         const reply = text?.trim() || "(No response generated.)";
         conversation.push({ role: "assistant", content: reply });
 
-        console.log(`\nNLC: ${reply}\n`);
+        box("NLC", [reply]);
       }
     },
   );
@@ -619,7 +704,7 @@ program
         tools,
       });
 
-      console.log(text);
+      box("Response", [text]);
     },
   );
 

@@ -66,6 +66,8 @@
     "exec-sh": "0.4.0",
     "execa": "9.6.1",
     "log-symbols": "7.0.1",
+    "marked": "15.0.12",
+    "marked-terminal": "7.3.0",
     "zod": "3.25.76"
   }
 }

@@ -4,7 +4,7 @@ import { openai } from "@ai-sdk/openai";
 import { config } from "dotenv";
 import { input } from "@inquirer/prompts";
 
-import { box } from "./utils/box";
+import { renderMarkdown } from "./utils/markdown";
 import {
   setAutoAcceptChanges,
   getAutoAcceptChanges,
@@ -107,7 +107,7 @@ program
           conversation.push({ role: "assistant", content: reply });
 
           logger.success(`Assistant responded in ${Date.now() - startedAt}ms`);
-          box("NLC", [reply]);
+          renderMarkdown("NLC", reply);
         }
       } finally {
         logger.close();
@@ -145,7 +145,7 @@ program
 
         logger.success(`Assistant responded in ${Date.now() - startedAt}ms`);
 
-        box("Response", [text]);
+        renderMarkdown("Response", text ?? "");
       } finally {
         logger.close();
         setRuntimeLogger(null);

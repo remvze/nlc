@@ -11,6 +11,8 @@ import {
   setRuntimeLogger,
 } from "./state/runtime";
 import { CliLogger } from "./utils/logger";
+import { registerConfigCommand } from "./commands/config";
+import { getConfiguredApiKey, getConfiguredModel } from "./state/config";
 
 import pkg from "../package.json";
 
@@ -28,6 +30,25 @@ program
   )
   .version(pkg.version);
 
+registerConfigCommand(program);
+
+function resolveRuntimeOpenAiSettings() {
+  const configuredKey = getConfiguredApiKey();
+  const envKey = process.env.OPENAI_API_KEY?.trim();
+  const apiKey = envKey || configuredKey;
+  const model = getConfiguredModel();
+
+  if (!apiKey) {
+    throw new Error(
+      "OpenAI API key is missing. Run `nlc config` or set OPENAI_API_KEY in your environment.",
+    );
+  }
+
+  process.env.OPENAI_API_KEY = apiKey;
+
+  return { model };
+}
+
 program
   .command("chat")
   .description("Start an interactive multi-turn chat session with NLC")
@@ -41,6 +62,8 @@ program
       setAutoAcceptChanges(Boolean(options.dangerouslyAccept));
       const logger = new CliLogger("chat");
       setRuntimeLogger(logger);
+      const { model } = resolveRuntimeOpenAiSettings();
+      logger.info(`Model: ${model}`);
 
       const parsedMaxSteps = Number.parseInt(options.maxSteps, 10);
       const maxSteps =
@@ -73,7 +96,7 @@ program
 
           const startedAt = Date.now();
           const { text } = await generateText({
-            model: openai("gpt-5.3-codex"),
+            model: openai(model),
             system: getSystemPrompt(getAutoAcceptChanges()),
             messages: conversation,
             stopWhen: stepCountIs(maxSteps),
@@ -107,11 +130,13 @@ program
       const logger = new CliLogger("do");
       setRuntimeLogger(logger);
       try {
+        const { model } = resolveRuntimeOpenAiSettings();
         const prompt = request.join(" ");
         logger.info(`Request: ${prompt}`);
+        logger.info(`Model: ${model}`);
         const startedAt = Date.now();
         const { text } = await generateText({
-          model: openai("gpt-5.3-codex"),
+          model: openai(model),
           prompt,
           system: getSystemPrompt(getAutoAcceptChanges()),
           stopWhen: stepCountIs(15),

@@ -4,6 +4,7 @@ import { z } from "zod";
 import chalk from "chalk";
 
 import { box } from "@/utils/box";
+import { getRuntimeLogger } from "@/state/runtime";
 
 export const list_files = tool({
   description:
@@ -18,14 +19,20 @@ export const list_files = tool({
   }),
   execute: ({ path: _path }) => {
     const path = _path?.trim() ? _path : ".";
+    const logger = getRuntimeLogger();
+    const toolLog = logger?.startTool("list_files", { path });
 
-    box("📁 list_files", [`${chalk.dim("path:")} ${chalk.yellow(path)}`]);
+    box("list_files", [`${chalk.dim("path:")} ${chalk.yellow(path)}`]);
 
     try {
       const files = fs.readdirSync(path, { recursive: false });
-
+      toolLog?.finish({ success: true, output: { path, count: files.length } });
       return { path, files };
     } catch (error) {
+      toolLog?.finish({
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
+      });
       return { error };
     }
   },

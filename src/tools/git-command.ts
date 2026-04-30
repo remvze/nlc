@@ -4,8 +4,9 @@ import { execa } from "execa";
 import chalk from "chalk";
 import { confirm } from "@inquirer/prompts";
 
-import { getAutoAcceptChanges } from "@/state/runtime";
+import { getAutoAcceptChanges, getRuntimeLogger } from "@/state/runtime";
 import { box } from "@/utils/box";
+import { previewText } from "@/utils/preview";
 
 export const git_command = tool({
   description:
@@ -19,11 +20,18 @@ export const git_command = tool({
   }),
   execute: async ({ args, cwd }) => {
     const workingDir = cwd?.trim() ? cwd : process.cwd();
+    const logger = getRuntimeLogger();
 
     const normalized = args.map((a) => a.trim()).filter((a) => a.length > 0);
     if (normalized.length === 0) {
       return { error: "No git arguments provided." };
     }
+
+    const command = `git ${normalized.join(" ")}`;
+    const toolLog = logger?.startTool("git_command", {
+      command,
+      cwd: workingDir,
+    });
 
     const cmdLower = normalized.join(" ").toLowerCase();
     const isBlocked =
@@ -38,63 +46,89 @@ export const git_command = tool({
       cmdLower.includes("branch -d");
 
     if (isBlocked) {
+      const error =
+        "Blocked potentially destructive git command. If you explicitly want this, use run_command with a clear user request.";
+      toolLog?.finish({ success: false, error });
       return {
-        error:
-          "Blocked potentially destructive git command. If you explicitly want this, use run_command with a clear user request.",
-        command: `git ${normalized.join(" ")}`,
+        error,
+        command,
         cwd: workingDir,
       };
     }
 
-    box("🌿 git_command", [
-      chalk.yellow(`git ${normalized.join(" ")}`),
+    box("git_command", [
+      chalk.yellow(command),
       `${chalk.dim("Directory:")} ${chalk.yellow(workingDir)}`,
     ]);
 
     const shouldExecute = getAutoAcceptChanges()
       ? true
       : await confirm({
-          message: `Should I do it?`,
+          message: "Should I do it?",
         });
 
     if (!shouldExecute) {
+      toolLog?.finish({
+        success: false,
+        error: "User denied the git command execution.",
+      });
       return {
-        error: `User denied the git command execution. You may not ask to run the same or a very similar command again.`,
+        error: "User denied the git command execution.",
       };
     }
 
     try {
-      const subprocess = execa("git", normalized, {
+      const result = await execa("git", normalized, {
         cwd: workingDir,
         shell: false,
         stdio: "pipe",
       });
 
-      // subprocess.stdout?.on("data", (data) => {
-      //   process.stdout.write(data);
-      // });
-
-      // subprocess.stderr?.on("data", (data) => {
-      //   process.stderr.write(data);
-      // });
-
-      const result = await subprocess;
+      toolLog?.finish({
+        success: true,
+        output: {
+          command,
+          exitCode: result.exitCode ?? 0,
+          stdout: previewText(result.stdout ?? "", 8, 120),
+          stderr: previewText(result.stderr ?? "", 8, 120),
+        },
+      });
 
       return {
-        command: `git ${normalized.join(" ")}`,
+        command,
         cwd: workingDir,
         stdout: result.stdout ?? "",
         stderr: result.stderr ?? "",
         exitCode: result.exitCode ?? 0,
       };
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const execaError = error as {
+        stdout?: string;
+        stderr?: string;
+        exitCode?: number;
+      };
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      toolLog?.finish({
+        success: false,
+        error: errorMessage,
+        output: {
+          command,
+          exitCode:
+            typeof execaError.exitCode === "number" ? execaError.exitCode : 1,
+          stdout: previewText(execaError.stdout ?? "", 8, 120),
+          stderr: previewText(execaError.stderr ?? "", 8, 120),
+        },
+      });
+
       return {
-        command: `git ${normalized.join(" ")}`,
+        command,
         cwd: workingDir,
-        error: error instanceof Error ? error.message : String(error),
-        stdout: error?.stdout ?? "",
-        stderr: error?.stderr ?? "",
-        exitCode: typeof error?.exitCode === "number" ? error.exitCode : 1,
+        error: errorMessage,
+        stdout: execaError.stdout ?? "",
+        stderr: execaError.stderr ?? "",
+        exitCode:
+          typeof execaError.exitCode === "number" ? execaError.exitCode : 1,
       };
     }
   },

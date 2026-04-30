@@ -5,7 +5,8 @@ import chalk from "chalk";
 import { confirm } from "@inquirer/prompts";
 
 import { box } from "@/utils/box";
-import { getAutoAcceptChanges } from "@/state/runtime";
+import { previewText, toLoggable } from "@/utils/preview";
+import { getAutoAcceptChanges, getRuntimeLogger } from "@/state/runtime";
 import { applyEditOperation, type EditOperation } from "@/lib/edit";
 
 export const edit_file = tool({
@@ -39,24 +40,27 @@ export const edit_file = tool({
     ]),
   }),
   execute: async ({ path, operation }) => {
-    box("📝 edit_file", [
+    const logger = getRuntimeLogger();
+    const toolLog = logger?.startTool("edit_file", { path, operation });
+
+    box("edit_file", [
       `${chalk.dim("path:")} ${chalk.yellow(path)}`,
-      `${chalk.dim("operation:")} ${chalk.yellow(operation)}`,
+      `${chalk.dim("operation:")} ${chalk.yellow(toLoggable(operation))}`,
     ]);
 
     if (operation.type === "find_replace") {
-      box("Replace", [chalk.redBright(operation.find)]);
-      box("With", [chalk.greenBright(operation.replace)]);
+      box("Replace", [chalk.redBright(previewText(operation.find))]);
+      box("With", [chalk.greenBright(previewText(operation.replace))]);
     }
 
     if (operation.type === "insert_at_line") {
       box(`Insert at ${operation.line}`, [
-        chalk.greenBright(operation.content),
+        chalk.greenBright(previewText(operation.content)),
       ]);
     }
 
     if (operation.type === "delete_range") {
-      box(`Delete`, [
+      box("Delete", [
         chalk.red(`From line ${operation.startLine} to ${operation.endLine}`),
       ]);
     }
@@ -66,7 +70,8 @@ export const edit_file = tool({
       : await confirm({ message: "Should I do it?" });
 
     if (!shouldExecute) {
-      return { error: `User denied the request to edit this file.` };
+      toolLog?.finish({ success: false, error: "User denied file edit." });
+      return { error: "User denied the request to edit this file." };
     }
 
     try {
@@ -74,14 +79,24 @@ export const edit_file = tool({
       const updated = applyEditOperation(original, operation as EditOperation);
 
       if (updated === original) {
+        toolLog?.finish({
+          success: true,
+          output: { path, changed: false },
+        });
         return { success: "No changes applied (content unchanged)." };
       }
 
       fs.writeFileSync(path, updated);
 
-      const numbered = updated
-        .split("\n")
-        .map((line, i) => `[${i + 1}] ${line}`);
+      const numbered = updated.split("\n").map((line, i) => `[${i + 1}] ${line}`);
+      toolLog?.finish({
+        success: true,
+        output: {
+          path,
+          changed: true,
+          lines: numbered.length,
+        },
+      });
 
       return {
         success: "File has been edited.",
@@ -91,6 +106,10 @@ export const edit_file = tool({
         note: "Each line is numbered for you inside brackets.",
       };
     } catch (error) {
+      toolLog?.finish({
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
+      });
       return { error };
     }
   },

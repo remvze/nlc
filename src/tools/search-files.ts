@@ -4,6 +4,7 @@ import { execa } from "execa";
 import { rgPath } from "@vscode/ripgrep";
 
 import { box } from "@/utils/box";
+import { getRuntimeLogger } from "@/state/runtime";
 
 export const search_files = tool({
   description:
@@ -40,8 +41,16 @@ export const search_files = tool({
   execute: async ({ query, path, glob, caseSensitive, maxResults }) => {
     const searchPath = path?.trim() ? path : ".";
     const limit = maxResults ?? 200;
+    const logger = getRuntimeLogger();
+    const toolLog = logger?.startTool("search_files", {
+      query,
+      path: searchPath,
+      glob: glob ?? null,
+      caseSensitive: caseSensitive ?? null,
+      maxResults: limit,
+    });
 
-    box("🔎 search_files", [`For \"${query}\" in \"${searchPath}\"`]);
+    box("search_files", [`query="${query}" path="${searchPath}"`]);
 
     const args = [
       "--json",
@@ -82,22 +91,36 @@ export const search_files = tool({
       for (const line of stdout.split(/\r?\n/)) {
         if (!line.trim()) continue;
 
-        let event: any;
+        let event: unknown;
         try {
           event = JSON.parse(line);
         } catch {
           continue;
         }
 
-        if (event?.type !== "match") continue;
+        if (
+          typeof event !== "object" ||
+          !event ||
+          !("type" in event) ||
+          (event as { type?: unknown }).type !== "match"
+        ) {
+          continue;
+        }
 
-        const data = event.data;
+        const data = (event as {
+          data?: {
+            path?: { text?: unknown };
+            line_number?: unknown;
+            submatches?: Array<{ start?: unknown }>;
+            lines?: { text?: unknown };
+          };
+        }).data;
         const filePath = data?.path?.text;
         const lineNumber = data?.line_number;
         const submatch = data?.submatches?.[0];
         const column =
           typeof submatch?.start === "number" ? submatch.start + 1 : 1;
-        const text = data?.lines?.text ?? "";
+        const text = typeof data?.lines?.text === "string" ? data.lines.text : "";
 
         if (typeof filePath !== "string" || typeof lineNumber !== "number") {
           continue;
@@ -113,6 +136,16 @@ export const search_files = tool({
         if (matches.length >= limit) break;
       }
 
+      toolLog?.finish({
+        success: true,
+        output: {
+          count: matches.length,
+          truncated: matches.length >= limit,
+          exitCode,
+          stderr,
+        },
+      });
+
       return {
         query,
         path: searchPath,
@@ -125,13 +158,23 @@ export const search_files = tool({
         stderr,
         matches,
       };
-    } catch (error: any) {
-      const stdout = error?.stdout ?? "";
-      const stderr = error?.stderr ?? "";
-      const exitCode = typeof error?.exitCode === "number" ? error.exitCode : 1;
+    } catch (error: unknown) {
+      const execaError = error as {
+        stdout?: string;
+        stderr?: string;
+        exitCode?: number;
+      };
+      const stdout = execaError.stdout ?? "";
+      const stderr = execaError.stderr ?? "";
+      const exitCode =
+        typeof execaError.exitCode === "number" ? execaError.exitCode : 1;
 
       // ripgrep exit code 1 means "no matches", not a runtime failure.
       if (exitCode === 1) {
+        toolLog?.finish({
+          success: true,
+          output: { count: 0, truncated: false, exitCode, stderr },
+        });
         return {
           query,
           path: searchPath,
@@ -146,8 +189,15 @@ export const search_files = tool({
         };
       }
 
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      toolLog?.finish({
+        success: false,
+        error: errorMessage,
+        output: { exitCode, stderr },
+      });
+
       return {
-        error: error instanceof Error ? error.message : String(error),
+        error: errorMessage,
         query,
         path: searchPath,
         glob: glob ?? null,

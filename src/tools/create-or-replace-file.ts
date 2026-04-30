@@ -5,7 +5,8 @@ import chalk from "chalk";
 import { confirm } from "@inquirer/prompts";
 
 import { box } from "@/utils/box";
-import { getAutoAcceptChanges } from "@/state/runtime";
+import { previewText } from "@/utils/preview";
+import { getAutoAcceptChanges, getRuntimeLogger } from "@/state/runtime";
 
 export const create_or_replace_file = tool({
   description:
@@ -21,19 +22,25 @@ export const create_or_replace_file = tool({
       ),
   }),
   execute: async ({ path, new_content }) => {
-    box("📝 create_or_replace_file", [
+    const logger = getRuntimeLogger();
+    const toolLog = logger?.startTool("create_or_replace_file", {
+      path,
+      chars: new_content.length,
+    });
+
+    box("create_or_replace_file", [
       `${chalk.dim("path:")} ${chalk.yellow(path)}`,
       `${chalk.dim("new_content:")} ${chalk.yellow(`${new_content.length} chars`)}`,
     ]);
-
-    box("New Content", [chalk.greenBright(new_content)]);
+    box("New Content Preview", [chalk.greenBright(previewText(new_content))]);
 
     const shouldExecute = getAutoAcceptChanges()
       ? true
       : await confirm({ message: "Should I do it?" });
 
     if (!shouldExecute) {
-      return { error: `User denied the request to write to this file.` };
+      toolLog?.finish({ success: false, error: "User denied file write." });
+      return { error: "User denied the request to write to this file." };
     }
 
     try {
@@ -42,6 +49,10 @@ export const create_or_replace_file = tool({
       const numbered = new_content
         .split("\n")
         .map((line, i) => `[${i + 1}] ${line}`);
+      toolLog?.finish({
+        success: true,
+        output: { path, lines: numbered.length, chars: new_content.length },
+      });
 
       return {
         success: "File has been written.",
@@ -50,6 +61,10 @@ export const create_or_replace_file = tool({
         note: "Each line is numbered for you inside brackets.",
       };
     } catch (error) {
+      toolLog?.finish({
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
+      });
       return { error };
     }
   },

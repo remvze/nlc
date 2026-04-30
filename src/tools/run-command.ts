@@ -5,7 +5,8 @@ import chalk from "chalk";
 
 import { runCommand } from "@/lib/command";
 import { box } from "@/utils/box";
-import { getAutoAcceptChanges } from "@/state/runtime";
+import { previewText } from "@/utils/preview";
+import { getAutoAcceptChanges, getRuntimeLogger } from "@/state/runtime";
 
 export const run_command = tool({
   description:
@@ -16,8 +17,13 @@ export const run_command = tool({
   }),
   execute: async ({ command, cwd }) => {
     const workingDir = cwd?.trim() ? cwd : process.cwd();
+    const logger = getRuntimeLogger();
+    const toolLog = logger?.startTool("run_command", {
+      command,
+      cwd: workingDir,
+    });
 
-    box("⚙️ run_command", [
+    box("run_command", [
       chalk.yellow(command),
       `${chalk.dim("Directory:")} ${chalk.yellow(workingDir)}`,
     ]);
@@ -25,10 +31,16 @@ export const run_command = tool({
     const shouldExecute = getAutoAcceptChanges()
       ? true
       : await confirm({
-          message: `Should I do it?`,
+          message: "Should I do it?",
         });
 
     if (!shouldExecute) {
+      logger?.warn("Command execution denied by user.");
+      toolLog?.finish({
+        success: false,
+        error: "User denied the command execution.",
+      });
+
       return {
         error: `User denied the command execution. You may not ask to run the same or a very similar command again.`,
       };
@@ -38,6 +50,16 @@ export const run_command = tool({
       command,
       workingDir,
     );
+
+    toolLog?.finish({
+      success: !error,
+      output: {
+        exitCode,
+        stdout: previewText(stdout, 8, 120),
+        stderr: previewText(stderr, 8, 120),
+      },
+      error: error ?? undefined,
+    });
 
     return { error, stdout, stderr, exitCode };
   },

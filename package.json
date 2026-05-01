@@ -44,6 +44,7 @@
     "@commitlint/cli": "19.8.1",
     "@commitlint/config-conventional": "19.8.1",
     "@tsconfig/node20": "^20.1.6",
+    "@types/marked-terminal": "6.1.1",
     "@types/node": "^24.0.10",
     "commitizen": "4.3.1",
     "cz-conventional-changelog": "3.3.0",
@@ -60,14 +61,12 @@
     "boxen": "8.0.1",
     "chalk": "5.4.1",
     "cli-highlight": "2.1.11",
+    "cli-markdown": "3.5.1",
     "commander": "14.0.0",
     "conf": "14.0.0",
     "dotenv": "17.4.2",
-    "exec-sh": "0.4.0",
     "execa": "9.6.1",
     "log-symbols": "7.0.1",
-    "marked": "15.0.12",
-    "marked-terminal": "7.3.0",
     "zod": "3.25.76"
   }
 }

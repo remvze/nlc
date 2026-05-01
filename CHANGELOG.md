@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.1.0](https://github.com/remvze/nlc/compare/v1.0.0...v1.1.0) (2026-05-01)
+
+
+### ✨ Features
+
+* use cli-markdown ([9674edf](https://github.com/remvze/nlc/commit/9674edff505d68466c8293155375f3d4b2dee0f6))
+
 ## [1.0.0](https://github.com/remvze/nlc/compare/v0.2.0...v1.0.0) (2026-04-30)
 
 
